@@ -68,20 +68,36 @@ jobs:
           DEB_DIR="${GITHUB_WORKSPACE}/.deps/wpe/debs"
           mkdir -p "${DEB_DIR}" "${WPE_ROOT}"
 
-          urls=(
-            "https://deb.debian.org/debian/pool/main/libw/libwpe/libwpe-1.0-1_1.16.2-1_amd64.deb"
-            "https://deb.debian.org/debian/pool/main/libw/libwpe/libwpe-1.0-dev_1.16.2-1_amd64.deb"
-            "https://deb.debian.org/debian/pool/main/w/wpebackend-fdo/libwpebackend-fdo-1.0-1_1.16.0-1_amd64.deb"
-            "https://deb.debian.org/debian/pool/main/w/wpebackend-fdo/libwpebackend-fdo-1.0-dev_1.16.0-1_amd64.deb"
-            "https://deb.debian.org/debian/pool/main/w/wpewebkit/libwpewebkit-2.0-1_2.48.3-1_amd64.deb"
-            "https://deb.debian.org/debian/pool/main/w/wpewebkit/libwpewebkit-2.0-dev_2.48.3-1_amd64.deb"
-          )
+          download_deb() {
+            local dir="$1"
+            local regex="$2"
+            local filename
 
-          for url in "${urls[@]}"; do
-            file="${DEB_DIR}/$(basename "${url}")"
-            curl -fL --retry 5 --retry-delay 2 -o "${file}" "${url}"
-            dpkg-deb -x "${file}" "${WPE_ROOT}"
-          done
+            filename="$(curl -fsSL "${dir}" | grep -oE "${regex}" | sort -uV | tail -1)"
+            test -n "${filename}"
+
+            curl -fL --retry 5 --retry-delay 2 -o "${DEB_DIR}/${filename}" "${dir}${filename}"
+            dpkg-deb -x "${DEB_DIR}/${filename}" "${WPE_ROOT}"
+          }
+
+          download_deb \
+            "https://deb.debian.org/debian/pool/main/libw/libwpe/" \
+            'libwpe-1\.0-1_1\.16\.[^"]*_amd64\.deb'
+          download_deb \
+            "https://deb.debian.org/debian/pool/main/libw/libwpe/" \
+            'libwpe-1\.0-dev_1\.16\.[^"]*_amd64\.deb'
+          download_deb \
+            "https://deb.debian.org/debian/pool/main/w/wpebackend-fdo/" \
+            'libwpebackend-fdo-1\.0-1_1\.16\.[^"]*_amd64\.deb'
+          download_deb \
+            "https://deb.debian.org/debian/pool/main/w/wpebackend-fdo/" \
+            'libwpebackend-fdo-1\.0-dev_1\.16\.[^"]*_amd64\.deb'
+          download_deb \
+            "https://deb.debian.org/debian/pool/main/w/wpewebkit/" \
+            'libwpewebkit-2\.0-1_2\.50\.[^"]*_amd64\.deb'
+          download_deb \
+            "https://deb.debian.org/debian/pool/main/w/wpewebkit/" \
+            'libwpewebkit-2\.0-dev_2\.50\.[^"]*_amd64\.deb'
 
           find "${WPE_PKGCONFIG}" -name '*.pc' -print0 | while IFS= read -r -d '' file; do
             sed -i "s#^prefix=/usr\$#prefix=${WPE_ROOT}/usr#" "${file}"
@@ -92,6 +108,7 @@ jobs:
           PKG_CONFIG_PATH: ${{ env.WPE_PKGCONFIG }}:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
           LD_LIBRARY_PATH: ${{ env.WPE_LIBDIR }}
         run: |
+          pkg-config --atleast-version=2.50 wpe-webkit-2.0
           pkg-config --modversion wpe-webkit-2.0
           pkg-config --modversion wpebackend-fdo-1.0
           pkg-config --modversion wpe-platform-2.0 || true
