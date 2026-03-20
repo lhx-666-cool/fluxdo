@@ -139,16 +139,16 @@ jobs:
           install -Dm644 linux/runner/fluxdo.desktop "${APPDIR}/fluxdo.desktop"
           ln -sf fluxdo.png "${APPDIR}/.DirIcon"
 
-          mkdir -p "${APPDIR}/usr/lib/x86_64-linux-gnu/wpe-webkit-2.0/injected-bundle" "${APPDIR}/usr/share"
+          mkdir -p "${APPDIR}/usr/lib/wpe-webkit-2.0/injected-bundle" "${APPDIR}/usr/share"
           cp -a "${WPE_LIBDIR}"/libWPEWebKit-2.0.so* "${APPDIR}/lib/"
           cp -a "${WPE_LIBDIR}"/libwpe-1.0.so* "${APPDIR}/lib/"
           cp -a "${WPE_LIBDIR}"/libWPEBackend-fdo-1.0.so* "${APPDIR}/lib/"
-          cp -a "${WPE_LIBDIR}"/libWPEWebKit-2.0.so* "${APPDIR}/usr/lib/x86_64-linux-gnu/"
-          cp -a "${WPE_LIBDIR}"/libwpe-1.0.so* "${APPDIR}/usr/lib/x86_64-linux-gnu/"
-          cp -a "${WPE_LIBDIR}"/libWPEBackend-fdo-1.0.so* "${APPDIR}/usr/lib/x86_64-linux-gnu/"
-          cp -a "${WPE_LIBDIR}/wpe-webkit-2.0"/WPE*Process "${APPDIR}/usr/lib/x86_64-linux-gnu/wpe-webkit-2.0/"
+          cp -a "${WPE_LIBDIR}"/libWPEWebKit-2.0.so* "${APPDIR}/usr/lib/"
+          cp -a "${WPE_LIBDIR}"/libwpe-1.0.so* "${APPDIR}/usr/lib/"
+          cp -a "${WPE_LIBDIR}"/libWPEBackend-fdo-1.0.so* "${APPDIR}/usr/lib/"
+          cp -a "${WPE_LIBDIR}/wpe-webkit-2.0"/WPE*Process "${APPDIR}/usr/lib/wpe-webkit-2.0/"
           cp -a "${WPE_LIBDIR}/wpe-webkit-2.0/injected-bundle"/libWPEInjectedBundle.so \
-            "${APPDIR}/usr/lib/x86_64-linux-gnu/wpe-webkit-2.0/injected-bundle/"
+            "${APPDIR}/usr/lib/wpe-webkit-2.0/injected-bundle/"
           cp -a "${WPE_ROOT}/usr/share/wpe-webkit-2.0" "${APPDIR}/usr/share/"
 
           cat > "${APPDIR}/AppRun" <<'APPIMAGE_EOF'
@@ -156,7 +156,7 @@ jobs:
           set -eu
 
           HERE="$(dirname "$(readlink -f "$0")")"
-          export LD_LIBRARY_PATH="${HERE}/lib:${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+          export LD_LIBRARY_PATH="${HERE}/lib:${HERE}/usr/lib:${LD_LIBRARY_PATH:-}"
           export XDG_DATA_DIRS="${HERE}/share:${HERE}/usr/share:${XDG_DATA_DIRS:-}"
 
           exec "${HERE}/fluxdo" "$@"
@@ -180,6 +180,7 @@ jobs:
           LDAI_NO_APPSTREAM: 1
           LDAI_OUTPUT: fluxdo-${{ github.ref_name }}-linux-x86_64.AppImage
           VERSION: ${{ github.ref_name }}
+          LD_LIBRARY_PATH: ${{ github.workspace }}/AppDir/lib:${{ github.workspace }}/AppDir/usr/lib
         run: |
           ./linuxdeploy-x86_64.AppImage \
             --appdir "${APPDIR}" \
