@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ai_model_manager/ai_model_manager.dart'
     show SwipeActionCell, SwipeAction, SwipeActionScope;
-import 'package:open_filex/open_filex.dart';
+import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart' show ShareParams, SharePlus, XFile;
 
 import '../models/download_item.dart';
@@ -181,7 +181,7 @@ class _DownloadListPageState extends ConsumerState<DownloadListPage> {
       ToastService.showError(S.current.myBrowser_fileNotFound);
       return;
     }
-    final result = await OpenFilex.open(item.savePath, type: item.mimeType);
+    final result = await OpenFile.open(item.savePath, type: item.mimeType);
     if (result.type != ResultType.done && mounted) {
       // 打开失败时回退到分享面板
       SharePlus.instance.share(ShareParams(files: [XFile(item.savePath)]));

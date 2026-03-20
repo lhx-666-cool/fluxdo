@@ -11,6 +11,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart' as acrylic;
+import 'package:fvp/fvp.dart' as fvp;
 import 'pages/topics_page.dart';
 import 'pages/topics_screen.dart';
 import 'pages/profile_page.dart';
@@ -78,6 +79,12 @@ Future<bool> _initRhttp() async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isLinux) {
+    fvp.registerWith(options: {
+      'platforms': ['linux'],
+    });
+  }
 
   // 启用 Edge-to-Edge 模式（小白条沉浸式）
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);

@@ -227,6 +227,6 @@ git push origin v0.1.0
 
 ## 相关文档
 
-- [GitHub Actions 工作流](.github/workflows/build.yaml)
+- [GitHub Actions 工作流](.github/workflows/release-appimage.yaml)
 - [Release Template](.github/release_template.md)
 - [Changelog](../CHANGELOG.md)

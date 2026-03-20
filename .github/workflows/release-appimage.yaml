@@ -1,0 +1,128 @@
+name: Release AppImage
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    env:
+      APP_NAME: fluxdo
+      APPDIR: AppDir
+      ARCH: x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.9"
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            cmake \
+            curl \
+            desktop-file-utils \
+            libepoxy-dev \
+            libfuse2 \
+            libgtk-3-dev \
+            liblzma-dev \
+            libsecret-1-dev \
+            libssl-dev \
+            libwayland-dev \
+            libwpe-1.0-dev \
+            libwpebackend-fdo-1.0-dev \
+            libwpewebkit-1.0-dev \
+            ninja-build \
+            patchelf \
+            pkg-config \
+            xz-utils
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build DOH proxy
+        working-directory: core/doh_proxy
+        run: cargo build --release --features ech
+
+      - name: Build Linux bundle
+        run: flutter build linux --release
+
+      - name: Assemble AppDir
+        run: |
+          rm -rf "${APPDIR}" dist
+          mkdir -p "${APPDIR}" dist
+
+          cp -a build/linux/x64/release/bundle/. "${APPDIR}/"
+          cp core/doh_proxy/target/release/doh_proxy_bin "${APPDIR}/doh_proxy_bin"
+          cp web/icons/Icon-512.png "${APPDIR}/fluxdo.png"
+          install -Dm644 linux/runner/fluxdo.desktop "${APPDIR}/fluxdo.desktop"
+          ln -sf fluxdo.png "${APPDIR}/.DirIcon"
+
+          cat > "${APPDIR}/AppRun" <<'EOF'
+          #!/bin/sh
+          set -eu
+
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="${HERE}/lib:${HERE}/usr/lib:${LD_LIBRARY_PATH:-}"
+          export XDG_DATA_DIRS="${HERE}/share:${HERE}/usr/share:${XDG_DATA_DIRS:-}"
+
+          exec "${HERE}/fluxdo" "$@"
+          EOF
+
+          chmod +x "${APPDIR}/AppRun" "${APPDIR}/fluxdo" "${APPDIR}/doh_proxy_bin"
+
+      - name: Download linuxdeploy
+        run: |
+          curl -L \
+            -o linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -L \
+            -o linuxdeploy-plugin-appimage-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-appimage-x86_64.AppImage
+
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          LDAI_NO_APPSTREAM: 1
+          LDAI_OUTPUT: fluxdo-${{ github.ref_name }}-linux-x86_64.AppImage
+          VERSION: ${{ github.ref_name }}
+        run: |
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir "${APPDIR}" \
+            -e "${APPDIR}/fluxdo" \
+            -e "${APPDIR}/doh_proxy_bin" \
+            -d "${APPDIR}/fluxdo.desktop" \
+            -i "${APPDIR}/fluxdo.png" \
+            --output appimage
+
+          mv ./*.AppImage dist/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.AppImage

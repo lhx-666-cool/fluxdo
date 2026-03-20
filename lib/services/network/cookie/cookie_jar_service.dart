@@ -1085,7 +1085,53 @@ class CookieJarService {
       }
     }
 
+    if (io.Platform.isLinux) {
+      try {
+        final allCookies = await _webViewCookieManager.getAllCookies();
+        for (final wc in allCookies) {
+          final normalizedDomain = _normalizeWebViewCookieDomain(wc.domain);
+          if (!_isRelevantWebViewCookieDomain(
+            normalizedDomain,
+            baseHost: baseHost,
+            relatedHosts: relatedHosts,
+          )) {
+            continue;
+          }
+
+          final primaryHost = normalizedDomain ?? baseHost;
+          final key =
+              '${wc.name}|${normalizedDomain ?? primaryHost}|${wc.path ?? '/'}|${wc.value.hashCode}';
+          final snapshot = collected.putIfAbsent(
+            key,
+            () => _CollectedWebViewCookie(cookie: wc, primaryHost: primaryHost),
+          );
+          snapshot.sourceHosts.add(primaryHost);
+        }
+      } catch (e) {
+        debugPrint('[CookieJar][Linux] getAllCookies fallback failed: $e');
+      }
+    }
+
     return collected;
+  }
+
+  bool _isRelevantWebViewCookieDomain(
+    String? normalizedDomain, {
+    required String baseHost,
+    required Iterable<String> relatedHosts,
+  }) {
+    if (normalizedDomain == null || normalizedDomain.isEmpty) {
+      return true;
+    }
+    if (normalizedDomain == baseHost || normalizedDomain.endsWith('.$baseHost')) {
+      return true;
+    }
+    for (final host in relatedHosts) {
+      if (host == normalizedDomain || host.endsWith('.$normalizedDomain')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   String? _normalizeWebViewCookieDomain(String? rawDomain) {

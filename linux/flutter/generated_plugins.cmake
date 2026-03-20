@@ -7,9 +7,12 @@ list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_linux
   flutter_acrylic
   flutter_avif_linux
+  flutter_inappwebview_linux
   flutter_secure_storage_linux
+  fvp
   gtk
   irondash_engine_context
+  open_file_linux
   screen_retriever_linux
   super_native_extensions
   url_launcher_linux

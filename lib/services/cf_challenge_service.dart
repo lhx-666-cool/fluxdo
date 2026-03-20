@@ -433,6 +433,7 @@ class _CfChallengePageState extends State<CfChallengePage> {
 
   /// 读取 cookie 值：先尝试 CookieManager，Windows 上 fallback 到 DevTools
   Future<String?> _readCookieValue(String name) async {
+    final baseHost = Uri.parse(AppConstants.baseUrl).host;
     try {
       final cookie = await _cfCookieManager.getCookie(
         url: WebUri(AppConstants.baseUrl),
@@ -443,6 +444,36 @@ class _CfChallengePageState extends State<CfChallengePage> {
       }
     } catch (e) {
       debugPrint('[CfChallenge] CookieManager 读取 $name 失败: $e');
+    }
+
+    if (io.Platform.isLinux) {
+      try {
+        final allCookies = await _cfCookieManager.getAllCookies();
+        Cookie? fallback;
+        for (final cookie in allCookies) {
+          if (cookie.name != name) {
+            continue;
+          }
+          final normalizedDomain = cookie.domain
+              ?.trim()
+              .replaceFirst(RegExp(r'^\.'), '');
+          if (normalizedDomain != null &&
+              normalizedDomain.isNotEmpty &&
+              normalizedDomain != baseHost &&
+              !normalizedDomain.endsWith('.$baseHost')) {
+            continue;
+          }
+          if (cookie.value.isNotEmpty) {
+            return cookie.value;
+          }
+          fallback ??= cookie;
+        }
+        if (fallback != null && fallback.value.isNotEmpty) {
+          return fallback.value;
+        }
+      } catch (e) {
+        debugPrint('[CfChallenge] CookieManager 全量读取 $name 失败: $e');
+      }
     }
 
     // Windows 上通过 CookieJarService 的统一方法读取
@@ -1104,4 +1135,3 @@ class _CfChallengePageState extends State<CfChallengePage> {
     );
   }
 }
-
