@@ -42,6 +42,7 @@ jobs:
             clang \
             cmake \
             curl \
+            debian-archive-keyring \
             dpkg-dev \
             desktop-file-utils \
             libdbus-1-dev \
@@ -75,7 +76,7 @@ jobs:
             "${APT_ROOT}/cache/archives/partial"
 
           cat > "${APT_ROOT}/etc/sources.list" <<'EOF'
-          deb [arch=amd64] https://deb.debian.org/debian sid main
+          deb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian sid main
           EOF
 
           APT_OPTS=(
