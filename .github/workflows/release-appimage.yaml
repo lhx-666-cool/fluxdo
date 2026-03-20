@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       APPDIR: AppDir
+      WPE_ROOT: ${{ github.workspace }}/.deps/wpe/root
+      WPE_LIBDIR: ${{ github.workspace }}/.deps/wpe/root/usr/lib/x86_64-linux-gnu
+      WPE_PKGCONFIG: ${{ github.workspace }}/.deps/wpe/root/usr/lib/x86_64-linux-gnu/pkgconfig
 
     steps:
       - name: Checkout
@@ -30,35 +33,18 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Add Debian WPE repository
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y debian-archive-keyring
-
-          cat <<'EOF' | sudo tee /etc/apt/sources.list.d/debian-trixie.list
-          deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian trixie main
-          EOF
-
-          cat <<'EOF' | sudo tee /etc/apt/preferences.d/debian-trixie-wpe.pref
-          Package: *
-          Pin: release n=trixie
-          Pin-Priority: 50
-
-          Package: libwpe-1.0-1 libwpe-1.0-dev libwpebackend-fdo-1.0-1 libwpebackend-fdo-1.0-dev libwpewebkit-2.0-1 libwpewebkit-2.0-dev wpewebkit-webdriver
-          Pin: release n=trixie
-          Pin-Priority: 990
-          EOF
-
-          sudo apt-get update
-
       - name: Install Linux build dependencies
         run: |
+          sudo apt-get update
           sudo apt-get install -y \
+            bubblewrap \
             build-essential \
             clang \
             cmake \
             curl \
+            dpkg-dev \
             desktop-file-utils \
+            libdbus-1-dev \
             libegl1-mesa-dev \
             libepoxy-dev \
             libfuse2t64 \
@@ -72,16 +58,39 @@ jobs:
             ninja-build \
             patchelf \
             pkg-config \
+            xdg-dbus-proxy \
             xz-utils
 
-          sudo apt-get install -y -t trixie \
-            bubblewrap \
-            libwpe-1.0-dev \
-            libwpebackend-fdo-1.0-dev \
-            libwpewebkit-2.0-dev \
-            xdg-dbus-proxy
+      - name: Download WPE packages
+        run: |
+          set -eux
+
+          DEB_DIR="${GITHUB_WORKSPACE}/.deps/wpe/debs"
+          mkdir -p "${DEB_DIR}" "${WPE_ROOT}"
+
+          urls=(
+            "https://deb.debian.org/debian/pool/main/libw/libwpe/libwpe-1.0-1_1.16.2-1_amd64.deb"
+            "https://deb.debian.org/debian/pool/main/libw/libwpe/libwpe-1.0-dev_1.16.2-1_amd64.deb"
+            "https://deb.debian.org/debian/pool/main/w/wpebackend-fdo/libwpebackend-fdo-1.0-1_1.16.0-1_amd64.deb"
+            "https://deb.debian.org/debian/pool/main/w/wpebackend-fdo/libwpebackend-fdo-1.0-dev_1.16.0-1_amd64.deb"
+            "https://deb.debian.org/debian/pool/main/w/wpewebkit/libwpewebkit-2.0-1_2.48.3-1_amd64.deb"
+            "https://deb.debian.org/debian/pool/main/w/wpewebkit/libwpewebkit-2.0-dev_2.48.3-1_amd64.deb"
+          )
+
+          for url in "${urls[@]}"; do
+            file="${DEB_DIR}/$(basename "${url}")"
+            curl -fL --retry 5 --retry-delay 2 -o "${file}" "${url}"
+            dpkg-deb -x "${file}" "${WPE_ROOT}"
+          done
+
+          find "${WPE_PKGCONFIG}" -name '*.pc' -print0 | while IFS= read -r -d '' file; do
+            sed -i "s#^prefix=/usr\$#prefix=${WPE_ROOT}/usr#" "${file}"
+          done
 
       - name: Verify WPE toolchain
+        env:
+          PKG_CONFIG_PATH: ${{ env.WPE_PKGCONFIG }}:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          LD_LIBRARY_PATH: ${{ env.WPE_LIBDIR }}
         run: |
           pkg-config --modversion wpe-webkit-2.0
           pkg-config --modversion wpebackend-fdo-1.0
@@ -95,6 +104,11 @@ jobs:
         run: cargo build --release --features ech
 
       - name: Build Linux bundle
+        env:
+          PKG_CONFIG_PATH: ${{ env.WPE_PKGCONFIG }}:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          LD_LIBRARY_PATH: ${{ env.WPE_LIBDIR }}
+          LIBRARY_PATH: ${{ env.WPE_LIBDIR }}
+          CMAKE_PREFIX_PATH: ${{ env.WPE_ROOT }}/usr
         run: flutter build linux --release
 
       - name: Assemble AppDir
@@ -107,6 +121,13 @@ jobs:
           cp web/icons/Icon-512.png "${APPDIR}/fluxdo.png"
           install -Dm644 linux/runner/fluxdo.desktop "${APPDIR}/fluxdo.desktop"
           ln -sf fluxdo.png "${APPDIR}/.DirIcon"
+
+          mkdir -p "${APPDIR}/usr/lib/x86_64-linux-gnu" "${APPDIR}/usr/share"
+          cp -a "${WPE_LIBDIR}"/libWPEWebKit-2.0.so* "${APPDIR}/lib/"
+          cp -a "${WPE_LIBDIR}"/libwpe-1.0.so* "${APPDIR}/lib/"
+          cp -a "${WPE_LIBDIR}"/libWPEBackend-fdo-1.0.so* "${APPDIR}/lib/"
+          cp -a "${WPE_LIBDIR}/wpe-webkit-2.0" "${APPDIR}/usr/lib/x86_64-linux-gnu/"
+          cp -a "${WPE_ROOT}/usr/share/wpe-webkit-2.0" "${APPDIR}/usr/share/"
 
           cat > "${APPDIR}/AppRun" <<'APPIMAGE_EOF'
           #!/bin/sh
