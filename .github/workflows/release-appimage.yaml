@@ -66,38 +66,51 @@ jobs:
           set -eux
 
           DEB_DIR="${GITHUB_WORKSPACE}/.deps/wpe/debs"
-          mkdir -p "${DEB_DIR}" "${WPE_ROOT}"
+          APT_ROOT="${GITHUB_WORKSPACE}/.deps/apt"
+          mkdir -p \
+            "${DEB_DIR}" \
+            "${WPE_ROOT}" \
+            "${APT_ROOT}/etc" \
+            "${APT_ROOT}/state/lists/partial" \
+            "${APT_ROOT}/cache/archives/partial"
 
-          download_deb() {
-            local dir="$1"
-            local regex="$2"
-            local filename
+          cat > "${APT_ROOT}/etc/sources.list" <<'EOF'
+          deb [arch=amd64] https://deb.debian.org/debian sid main
+          EOF
 
-            filename="$(curl -fsSL "${dir}" | grep -oE "${regex}" | sort -uV | tail -1)"
-            test -n "${filename}"
+          APT_OPTS=(
+            -o Dir::Etc::sourcelist="${APT_ROOT}/etc/sources.list"
+            -o Dir::Etc::sourceparts=-
+            -o Dir::State="${APT_ROOT}/state"
+            -o Dir::Cache="${APT_ROOT}/cache"
+            -o APT::Architecture=amd64
+          )
 
-            curl -fL --retry 5 --retry-delay 2 -o "${DEB_DIR}/${filename}" "${dir}${filename}"
-            dpkg-deb -x "${DEB_DIR}/${filename}" "${WPE_ROOT}"
-          }
+          apt-get "${APT_OPTS[@]}" update
 
-          download_deb \
-            "https://deb.debian.org/debian/pool/main/libw/libwpe/" \
-            'libwpe-1\.0-1_1\.16\.[^"]*_amd64\.deb'
-          download_deb \
-            "https://deb.debian.org/debian/pool/main/libw/libwpe/" \
-            'libwpe-1\.0-dev_1\.16\.[^"]*_amd64\.deb'
-          download_deb \
-            "https://deb.debian.org/debian/pool/main/w/wpebackend-fdo/" \
-            'libwpebackend-fdo-1\.0-1_1\.16\.[^"]*_amd64\.deb'
-          download_deb \
-            "https://deb.debian.org/debian/pool/main/w/wpebackend-fdo/" \
-            'libwpebackend-fdo-1\.0-dev_1\.16\.[^"]*_amd64\.deb'
-          download_deb \
-            "https://deb.debian.org/debian/pool/main/w/wpewebkit/" \
-            'libwpewebkit-2\.0-1_2\.50\.[^"]*_amd64\.deb'
-          download_deb \
-            "https://deb.debian.org/debian/pool/main/w/wpewebkit/" \
-            'libwpewebkit-2\.0-dev_2\.50\.[^"]*_amd64\.deb'
+          base_packages=(
+            libwpe-1.0-1
+            libwpe-1.0-dev
+            libwpebackend-fdo-1.0-1
+            libwpebackend-fdo-1.0-dev
+            libwpewebkit-2.0-1
+            libwpewebkit-2.0-dev
+          )
+
+          {
+            printf '%s\n' "${base_packages[@]}"
+            apt-cache "${APT_OPTS[@]}" depends "${base_packages[@]}" \
+              | sed -nE 's/^\s*(Pre)?Depends:\s*([^ ]+).*/\2/p'
+          } | sed '/^</d' | sort -u > "${DEB_DIR}/packages.txt"
+
+          while IFS= read -r package; do
+            [ -n "${package}" ] || continue
+            (cd "${DEB_DIR}" && apt-get "${APT_OPTS[@]}" download "${package}")
+          done < "${DEB_DIR}/packages.txt"
+
+          for deb in "${DEB_DIR}"/*.deb; do
+            dpkg-deb -x "${deb}" "${WPE_ROOT}"
+          done
 
           find "${WPE_PKGCONFIG}" -name '*.pc' -print0 | while IFS= read -r -d '' file; do
             sed -i "s#^prefix=/usr\$#prefix=${WPE_ROOT}/usr#" "${file}"
@@ -180,7 +193,7 @@ jobs:
           LDAI_NO_APPSTREAM: 1
           LDAI_OUTPUT: fluxdo-${{ github.ref_name }}-linux-x86_64.AppImage
           VERSION: ${{ github.ref_name }}
-          LD_LIBRARY_PATH: ${{ github.workspace }}/AppDir/lib:${{ github.workspace }}/AppDir/usr/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/AppDir/lib:${{ github.workspace }}/AppDir/usr/lib:${{ env.WPE_LIBDIR }}
         run: |
           ./linuxdeploy-x86_64.AppImage \
             --appdir "${APPDIR}" \
